@@ -1,0 +1,152 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Dataset represents an uploaded Excel file
+model Dataset {
+  id           String   @id @default(uuid())
+  filename     String
+  originalName String
+  sheetName    String   @default("Ranklist")
+  uploadDate   DateTime @default(now())
+  rowCount     Int      @default(0)
+  
+  // Relations
+  rows         DataRow[]
+  mappings     ColumnMapping[]
+  
+  @@map("datasets")
+}
+
+// DataRow represents a single collaborator row from the Excel file
+model DataRow {
+  id                    String   @id @default(uuid())
+  datasetId             String
+  
+  // Original data fields (normalized column names)
+  rankOrder             Int?
+  firstName             String?
+  lastName              String?
+  rankCategory          String?  // CN, CD, FC, AG, FA, JFA1, etc.
+  
+  // Numeric fields
+  nbDealsPersonal       Float    @default(0)
+  nbDealsGlobal         Float    @default(0)
+  unitsBrutPersonal     Float    @default(0)
+  unitsBrutGlobal       Float    @default(0)
+  unitsBrutParallel     Float    @default(0)
+  
+  // Coach information
+  coachRank             String?
+  coachFirstName        String?
+  coachLastName         String?
+  
+  // Computed fields
+  fullName              String?  // firstName + lastName
+  coachFullName         String?  // coachFirstName + coachLastName
+  totalUnits            Float    @default(0) // sum of all units
+  
+  createdAt             DateTime @default(now())
+  
+  // Relations
+  dataset               Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  
+  @@index([datasetId])
+  @@index([rankCategory])
+  @@index([coachFullName])
+  @@map("data_rows")
+}
+
+// ColumnMapping stores the mapping between Excel columns and internal fields
+model ColumnMapping {
+  id                String   @id @default(uuid())
+  datasetId         String
+  
+  // Original Excel column name
+  excelColumnName   String
+  
+  // Normalized internal field name
+  internalFieldName String
+  
+  // Column type (string, number, date, etc.)
+  columnType        String   @default("string")
+  
+  // Is this mapping active/confirmed?
+  isActive          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  dataset           Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  
+  @@unique([datasetId, excelColumnName])
+  @@map("column_mappings")
+}
+
+// IndicatorDefinition stores predefined and custom indicators
+model IndicatorDefinition {
+  id              String   @id @default(uuid())
+  
+  // Basic info
+  name            String
+  description     String?
+  type            String   @default("custom") // "predefined" or "custom"
+  
+  // Ranking mode: "standard", "mixedRanks", "singleRankSelection"
+  rankingMode     String   @default("standard")
+  
+  // Grouping dimension
+  groupBy         String   // "collaborator", "coach", "rank_category"
+  
+  // Metric configuration
+  metricField     String   // Which field to aggregate (e.g., "unitsBrutPersonal", "totalUnits")
+  aggregation     String   @default("sum") // "sum", "avg", "count", "min", "max"
+  
+  // Filter configuration (stored as JSON)
+  filters         Json?    // { "rankCategory": "CN", "gender": "F", etc. }
+  
+  // Additional options
+  sortOrder       String   @default("desc") // "asc" or "desc"
+  topN            Int?     // Limit results to top N (optional)
+  
+  // Advanced ranking configuration (MODE A & B)
+  selectedRanks           Json?    // Array of rank categories (max 3) for mixedRanks mode
+  specialOperations       Json?    // Array of { targetCollaboratorId, subtractCollaboratorIds } for mixedRanks mode
+  includedCollaboratorIds Json?    // Array of collaborator IDs to include
+  excludedCollaboratorIds Json?    // Array of collaborator IDs to exclude
+  
+  // Metadata
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("indicator_definitions")
+}
+
+// RankingResult stores computed rankings (optional, for caching)
+model RankingResult {
+  id              String   @id @default(uuid())
+  indicatorId     String
+  datasetId       String
+  
+  // Result data (stored as JSON array)
+  results         Json     // Array of ranking rows with computed values
+  
+  // Metadata
+  computedAt      DateTime @default(now())
+  rowCount        Int      @default(0)
+  
+  @@index([indicatorId])
+  @@index([datasetId])
+  @@map("ranking_results")
+}
+
