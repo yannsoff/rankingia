@@ -37,7 +37,9 @@ export interface ColumnMapping {
 
 export interface SpecialOperation {
   targetCollaboratorId: string;
+  targetCollaboratorName?: string; // Name for matching when IDs change
   subtractCollaboratorIds: string[];
+  subtractCollaboratorNames?: string[]; // Names for matching when IDs change
 }
 
 export interface IndicatorDefinition {

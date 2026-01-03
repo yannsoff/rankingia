@@ -157,11 +157,23 @@ export default function MixedRanksModal({
       return;
     }
 
-    // Add the new operation
+    // Add the new operation with both IDs and names for persistence
+    const targetCollab = getCollaboratorById(operationTargetId);
+    const subtractCollabs = Array.from(operationSubtractIds)
+      .map(id => getCollaboratorById(id))
+      .filter((c): c is Collaborator => c !== undefined);
+    
     const newOperation: SpecialOperation = {
       targetCollaboratorId: operationTargetId,
-      subtractCollaboratorIds: Array.from(operationSubtractIds)
+      targetCollaboratorName: targetCollab?.fullName || '',
+      subtractCollaboratorIds: Array.from(operationSubtractIds),
+      subtractCollaboratorNames: subtractCollabs.map(c => c.fullName)
     };
+
+    console.log('✅ Creating operation with names:', {
+      target: targetCollab?.fullName,
+      subtract: subtractCollabs.map(c => c.fullName)
+    });
 
     setSpecialOperations([...specialOperations, newOperation]);
     setShowAddOperation(false);
