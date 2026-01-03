@@ -53,6 +53,20 @@ app.use('/api/mappings', mappingRoutes);
 app.use('/api/rankings', rankingRoutes);
 app.use('/api/collaborators', collaboratorRoutes);
 
+// Serve static files from frontend build (for production)
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+  console.log('📁 Serving frontend from:', frontendPath);
+  
+  // All non-API routes should serve index.html
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api/')) {
+      res.sendFile(path.join(frontendPath, 'index.html'));
+    }
+  });
+}
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
