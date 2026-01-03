@@ -30,9 +30,17 @@ const pgPool = new pg.Pool({
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? true // Allow same origin in production
+    ? function(origin, callback) {
+        // In production, allow requests with no origin (same-origin) or from the same domain
+        if (!origin || origin.includes('railway.app')) {
+          callback(null, true);
+        } else {
+          callback(null, false);
+        }
+      }
     : (process.env.FRONTEND_URL || 'http://localhost:5173'),
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['set-cookie']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,7 +59,8 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+    sameSite: 'lax', // Changed from 'strict' to 'lax' to allow cookies in same-site POST requests
+    path: '/' // Explicitly set path to ensure cookie is sent for all routes
   }
 }));
 
