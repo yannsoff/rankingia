@@ -91,11 +91,7 @@ export default function MixedRanksModal({
       const newRanks = selectedRanks.filter(r => r !== rank);
       setSelectedRanks(newRanks);
     } else {
-      // Add rank (max 3)
-      if (selectedRanks.length >= 3) {
-        setError('Maximum 3 rangs peuvent être sélectionnés');
-        return;
-      }
+      // Add rank (no limit)
       setSelectedRanks([...selectedRanks, rank]);
     }
     setError('');
@@ -333,7 +329,7 @@ export default function MixedRanksModal({
           {/* Rank Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Sélection des rangs (max 3) *
+              Sélection des rangs *
             </label>
             <div className="flex flex-wrap gap-2">
               {availableRanks.map(rank => (
