@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../middleware/auth';
+import prisma from '../utils/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /api/mappings/:datasetId

@@ -2,12 +2,11 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../middleware/auth';
 import { parseExcelFile, parseCSVFile } from '../utils/excelParser';
+import prisma from '../utils/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Configure multer for file upload
 const storage = multer.diskStorage({

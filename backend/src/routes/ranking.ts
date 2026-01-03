@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../middleware/auth';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
+import prisma from '../utils/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 interface RankingRow {
   rank: number;
