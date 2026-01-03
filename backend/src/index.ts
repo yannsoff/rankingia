@@ -20,7 +20,9 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production' 
+    ? true // Allow same origin in production
+    : (process.env.FRONTEND_URL || 'http://localhost:5173'),
   credentials: true
 }));
 app.use(express.json());
@@ -34,7 +36,8 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
   }
 }));
 
