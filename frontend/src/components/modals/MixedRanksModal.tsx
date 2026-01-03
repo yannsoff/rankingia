@@ -167,7 +167,7 @@ export default function MixedRanksModal({
       targetCollaboratorId: operationTargetId,
       targetCollaboratorName: targetCollab?.fullName || '',
       subtractCollaboratorIds: Array.from(operationSubtractIds),
-      subtractCollaboratorNames: subtractCollabs.map(c => c.fullName)
+      subtractCollaboratorNames: subtractCollabs.map(c => c.fullName || '').filter(name => name !== '')
     };
 
     console.log('✅ Creating operation with names:', {
