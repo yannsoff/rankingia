@@ -210,23 +210,68 @@ function computeMixedRanksRanking(
   
   // Apply special operations (per collaborator)
   if (specialOperations && specialOperations.length > 0) {
+    console.log('🔧 Applying special operations:', specialOperations.length);
+    
+    // For compatibility when file is re-uploaded: try to match by ID first, then by name
+    // First, get the original collaborator names from the operation IDs (from old rows)
+    const allRows = rows; // We have access to all rows from current upload
+    
     specialOperations.forEach(operation => {
       const { targetCollaboratorId, subtractCollaboratorIds } = operation;
       
-      // Find target collaborator
-      const targetMetric = collaboratorMetrics.get(targetCollaboratorId);
-      if (!targetMetric) return;
+      // Try to find target collaborator by ID (if same file upload)
+      let targetMetric = collaboratorMetrics.get(targetCollaboratorId);
+      
+      // If not found by ID, try to match by finding the same name in old rows
+      if (!targetMetric) {
+        console.log(`⚠️ Target ID ${targetCollaboratorId} not found in current metrics, trying to match by name...`);
+        
+        // Find the target collaborator's name from ALL rows (including excluded ones)
+        const oldTargetRow = allRows.find(r => r.id === targetCollaboratorId);
+        if (oldTargetRow && oldTargetRow.fullName) {
+          // Find in current metrics by name
+          for (const [id, metric] of collaboratorMetrics.entries()) {
+            if (metric.name === oldTargetRow.fullName) {
+              targetMetric = metric;
+              console.log(`✅ Matched target by name: ${oldTargetRow.fullName}`);
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!targetMetric) {
+        console.log(`❌ Could not find target collaborator for operation`);
+        return;
+      }
       
       // Calculate sum of values to subtract
       let subtractSum = 0;
       subtractCollaboratorIds.forEach(subtractId => {
-        const subtractMetric = collaboratorMetrics.get(subtractId);
+        let subtractMetric = collaboratorMetrics.get(subtractId);
+        
+        // If not found by ID, try to match by name
+        if (!subtractMetric) {
+          const oldSubtractRow = allRows.find(r => r.id === subtractId);
+          if (oldSubtractRow && oldSubtractRow.fullName) {
+            for (const [id, metric] of collaboratorMetrics.entries()) {
+              if (metric.name === oldSubtractRow.fullName) {
+                subtractMetric = metric;
+                console.log(`✅ Matched subtract collaborator by name: ${oldSubtractRow.fullName}`);
+                break;
+              }
+            }
+          }
+        }
+        
         if (subtractMetric) {
+          console.log(`  - Subtracting ${subtractMetric.baseValue} from ${targetMetric.name} (collaborator: ${subtractMetric.name})`);
           subtractSum += subtractMetric.baseValue;
         }
       });
       
       // Apply subtraction to target
+      console.log(`🎯 Final: ${targetMetric.name}: ${targetMetric.baseValue} - ${subtractSum} = ${targetMetric.baseValue - subtractSum}`);
       targetMetric.finalValue = targetMetric.baseValue - subtractSum;
     });
   }
