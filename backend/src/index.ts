@@ -1,9 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import session from 'express-session';
-import connectPgSimple from 'connect-pg-simple';
-import pg from 'pg';
 import path from 'path';
 
 // Import routes
@@ -20,13 +17,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// PostgreSQL session store
-const PgSession = connectPgSimple(session);
-const pgPool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
-});
-
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
@@ -39,32 +29,12 @@ app.use(cors({
         }
       }
     : (process.env.FRONTEND_URL || 'http://localhost:5173'),
-  credentials: true,
-  exposedHeaders: ['set-cookie']
+  credentials: true // Keep this for other cookies if needed
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session configuration with PostgreSQL store
-app.use(session({
-  store: new PgSession({
-    pool: pgPool,
-    tableName: 'session',
-    createTableIfMissing: true
-  }),
-  secret: process.env.SESSION_SECRET || 'ovb-ranklist-secret-change-this',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax', // Changed from 'strict' to 'lax' to allow cookies in same-site POST requests
-    path: '/' // Explicitly set path to ensure cookie is sent for all routes
-  }
-}));
-
-console.log('📦 Session store configured:', process.env.NODE_ENV === 'production' ? 'PostgreSQL' : 'PostgreSQL');
+console.log('🔐 Authentication: JWT-based (stateless)');
 
 // Create uploads directory if it doesn't exist
 import fs from 'fs';

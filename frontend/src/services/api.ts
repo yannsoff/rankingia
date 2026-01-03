@@ -1,18 +1,74 @@
 import axios from 'axios';
 import type { Dataset, IndicatorDefinition, Ranking, Stats, Collaborator } from '../types';
 
+// Token management
+const TOKEN_KEY = 'ovb_auth_token';
+
+export const tokenManager = {
+  getToken: (): string | null => {
+    return localStorage.getItem(TOKEN_KEY);
+  },
+  setToken: (token: string): void => {
+    localStorage.setItem(TOKEN_KEY, token);
+  },
+  removeToken: (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+};
+
 const api = axios.create({
   baseURL: '/api',
-  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
+// Add token to every request
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenManager.getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Handle 401 errors globally (token expired or invalid)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired, remove it
+      tokenManager.removeToken();
+      // Optionally redirect to login
+      console.log('🔒 Token invalid or expired, please login again');
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Auth API
 export const authAPI = {
-  login: (password: string) => api.post('/auth/login', { password }),
-  logout: () => api.post('/auth/logout'),
+  login: async (password: string) => {
+    const response = await api.post('/auth/login', { password });
+    // Store token if login successful
+    if (response.data.token) {
+      tokenManager.setToken(response.data.token);
+      console.log('✅ Token stored successfully');
+    }
+    return response;
+  },
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    // Remove token on logout
+    tokenManager.removeToken();
+    console.log('👋 Token removed');
+    return response;
+  },
   getStatus: () => api.get('/auth/status')
 };
 
