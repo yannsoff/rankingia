@@ -121,3 +121,7 @@ router.get('/ranks', requireAuth, async (req: Request, res: Response) => {
 });
 
 export default router;
+
+
+
+

@@ -328,6 +328,90 @@ function computeSingleRankRanking(
 }
 
 /**
+ * Validate indicator configuration for a specific ranking mode
+ */
+function validateIndicatorConfig(indicator: any, rows: any[]): { valid: boolean; error?: string; hint?: string } {
+  const rankingMode = indicator.rankingMode || 'standard';
+  
+  // Basic validation for all modes
+  if (!indicator.groupBy || !indicator.metricField) {
+    return { 
+      valid: false, 
+      error: 'Configuration incomplète : groupBy et metricField sont requis',
+      hint: 'Cet indicateur semble corrompu. Veuillez le dupliquer pour le recréer.'
+    };
+  }
+  
+  // Mode-specific validation
+  if (rankingMode === 'mixedRanks' || rankingMode === 'singleRankSelection') {
+    // Parse and validate selectedRanks
+    let selectedRanks = indicator.selectedRanks;
+    if (typeof selectedRanks === 'string') {
+      try {
+        selectedRanks = JSON.parse(selectedRanks);
+      } catch (e) {
+        return { 
+          valid: false, 
+          error: 'Configuration invalide : selectedRanks mal formé',
+          hint: 'Dupliquez cet indicateur pour le reconfigurer.'
+        };
+      }
+    }
+    
+    if (!Array.isArray(selectedRanks) || selectedRanks.length === 0) {
+      return { 
+        valid: false, 
+        error: `Configuration incomplète : aucun rang sélectionné pour le mode ${rankingMode}`,
+        hint: 'Dupliquez cet indicateur pour le reconfigurer.'
+      };
+    }
+    
+    // Check if selected ranks exist in the current dataset
+    const availableRanks = new Set(rows.map(row => row.rankCategory).filter(Boolean));
+    const missingRanks = selectedRanks.filter((rank: string) => !availableRanks.has(rank));
+    
+    if (missingRanks.length > 0) {
+      return {
+        valid: false,
+        error: `Rangs incompatibles avec ce fichier : ${missingRanks.join(', ')}`,
+        hint: `Ce fichier ne contient pas les rangs requis (${missingRanks.join(', ')}). Rangs disponibles : ${Array.from(availableRanks).join(', ')}`
+      };
+    }
+    
+    // Validate includedCollaboratorIds
+    let includedCollaboratorIds = indicator.includedCollaboratorIds;
+    if (typeof includedCollaboratorIds === 'string') {
+      try {
+        includedCollaboratorIds = JSON.parse(includedCollaboratorIds);
+      } catch (e) {
+        return { 
+          valid: false, 
+          error: 'Configuration invalide : includedCollaboratorIds mal formé',
+          hint: 'Dupliquez cet indicateur pour le reconfigurer.'
+        };
+      }
+    }
+    
+    if (!Array.isArray(includedCollaboratorIds) || includedCollaboratorIds.length === 0) {
+      return { 
+        valid: false, 
+        error: `Configuration incomplète : aucun collaborateur sélectionné pour le mode ${rankingMode}`,
+        hint: 'Dupliquez cet indicateur pour le reconfigurer.'
+      };
+    }
+    
+    // NOTE: Skip collaborator ID validation for mixedRanks/singleRankSelection modes
+    // IDs change with each file upload, so we'll filter by selected ranks at execution time
+    // The includedCollaboratorIds are only used if they match the current dataset IDs
+    console.log(`ℹ️ Indicator has ${includedCollaboratorIds.length} included collaborators (IDs from original file)`);
+    console.log(`ℹ️ Current dataset has ${rows.length} total rows`);
+    console.log(`ℹ️ Will filter by selected ranks: ${selectedRanks.join(', ')}`)
+  }
+  
+  return { valid: true };
+}
+
+/**
  * POST /api/rankings/compute
  * Compute a ranking based on an indicator and dataset
  */
@@ -348,13 +432,23 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Indicator not found' });
     }
     
-    // Fetch dataset rows
+    // Fetch dataset rows first (needed for validation)
     const rows = await prisma.dataRow.findMany({
       where: { datasetId }
     });
     
     if (rows.length === 0) {
-      return res.status(404).json({ error: 'No data found for this dataset' });
+      return res.status(404).json({ error: 'Aucune donnée trouvée pour ce fichier' });
+    }
+    
+    // Validate indicator configuration against the current dataset
+    const validation = validateIndicatorConfig(indicator, rows);
+    if (!validation.valid) {
+      console.error('❌ Indicator validation failed:', validation.error);
+      return res.status(400).json({ 
+        error: validation.error,
+        hint: validation.hint || 'Cet indicateur nécessite une configuration complète. Veuillez le recréer ou le dupliquer pour le mettre à jour.'
+      });
     }
     
     let rankingData: RankingRow[];
@@ -398,17 +492,20 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
       console.log('  - Indicator name:', indicator.name);
       console.log('  - Selected ranks:', selectedRanks, 'length:', Array.isArray(selectedRanks) ? selectedRanks.length : 'not array');
       console.log('  - Special operations:', JSON.stringify(specialOperations, null, 2));
-      console.log('  - Included collaborator IDs:', includedCollaboratorIds, 'length:', Array.isArray(includedCollaboratorIds) ? includedCollaboratorIds.length : 'not array');
+      console.log('  - Included collaborator IDs (original file):', includedCollaboratorIds, 'length:', Array.isArray(includedCollaboratorIds) ? includedCollaboratorIds.length : 'not array');
       console.log('  - Metric field:', indicator.metricField);
       
       // Ensure correct types for function call
       const selectedRanksArray: string[] = Array.isArray(selectedRanks) ? selectedRanks as string[] : [];
       const specialOperationsArray: Array<{ targetCollaboratorId: string; subtractCollaboratorIds: string[] }> = 
         Array.isArray(specialOperations) ? specialOperations as any : [];
-      const includedCollaboratorIdsArray: string[] | null = 
-        Array.isArray(includedCollaboratorIds) && includedCollaboratorIds.length > 0 ? includedCollaboratorIds as string[] : null;
-      const excludedCollaboratorIdsArray: string[] | null = 
-        Array.isArray(excludedCollaboratorIds) && excludedCollaboratorIds.length > 0 ? excludedCollaboratorIds as string[] : null;
+      
+      // IMPORTANT: For mixedRanks mode with reused indicators across different file uploads,
+      // we ignore the original includedCollaboratorIds (they're from a different upload)
+      // Instead, we include ALL collaborators from the selected ranks in the current dataset
+      console.log('ℹ️ Using ALL collaborators from selected ranks (ignoring original IDs as they are from a different file upload)');
+      const includedCollaboratorIdsArray: string[] | null = null; // Use null to include all from selected ranks
+      const excludedCollaboratorIdsArray: string[] | null = null;
       
       rankingData = computeMixedRanksRanking(
         rows,

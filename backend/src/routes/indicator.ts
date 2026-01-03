@@ -201,7 +201,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
 /**
  * PUT /api/indicators/:id
- * Update an existing indicator
+ * Update an existing indicator (including advanced ranking configuration)
  */
 router.put('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -214,7 +214,12 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       aggregation,
       filters,
       sortOrder,
-      topN
+      topN,
+      rankingMode,
+      selectedRanks,
+      specialOperations,
+      includedCollaboratorIds,
+      excludedCollaboratorIds
     } = req.body;
     
     // Check if indicator exists and is not predefined
@@ -230,20 +235,42 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Cannot modify predefined indicators' });
     }
     
+    // Prepare update data with all fields
+    const updateData: any = {
+      name: name || existing.name,
+      description: description !== undefined ? description : existing.description,
+      groupBy: groupBy || existing.groupBy,
+      metricField: metricField || existing.metricField,
+      aggregation: aggregation || existing.aggregation,
+      filters: filters !== undefined ? filters : existing.filters,
+      sortOrder: sortOrder || existing.sortOrder,
+      topN: topN !== undefined ? topN : existing.topN,
+    };
+    
+    // Add advanced ranking fields if provided
+    if (rankingMode !== undefined) {
+      updateData.rankingMode = rankingMode;
+    }
+    if (selectedRanks !== undefined) {
+      updateData.selectedRanks = selectedRanks;
+    }
+    if (specialOperations !== undefined) {
+      updateData.specialOperations = specialOperations;
+    }
+    if (includedCollaboratorIds !== undefined) {
+      updateData.includedCollaboratorIds = includedCollaboratorIds;
+    }
+    if (excludedCollaboratorIds !== undefined) {
+      updateData.excludedCollaboratorIds = excludedCollaboratorIds;
+    }
+    
     // Update indicator
     const indicator = await prisma.indicatorDefinition.update({
       where: { id },
-      data: {
-        name: name || existing.name,
-        description: description !== undefined ? description : existing.description,
-        groupBy: groupBy || existing.groupBy,
-        metricField: metricField || existing.metricField,
-        aggregation: aggregation || existing.aggregation,
-        filters: filters !== undefined ? filters : existing.filters,
-        sortOrder: sortOrder || existing.sortOrder,
-        topN: topN !== undefined ? topN : existing.topN
-      }
+      data: updateData
     });
+    
+    console.log('✅ Indicator updated:', indicator.id);
     
     res.json({
       success: true,
@@ -293,7 +320,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 
 /**
  * POST /api/indicators/:id/duplicate
- * Duplicate an indicator
+ * Duplicate an indicator with all advanced configuration
  */
 router.post('/:id/duplicate', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -307,21 +334,38 @@ router.post('/:id/duplicate', requireAuth, async (req: Request, res: Response) =
       return res.status(404).json({ error: 'Indicator not found' });
     }
     
-    // Create duplicate
+    console.log('📋 Duplicating indicator with full config:', {
+      id: original.id,
+      name: original.name,
+      rankingMode: original.rankingMode,
+      hasSelectedRanks: !!original.selectedRanks,
+      hasSpecialOps: !!original.specialOperations,
+      hasIncludedCollabs: !!original.includedCollaboratorIds,
+    });
+    
+    // Create duplicate with ALL fields including advanced ranking configuration
     const duplicate = await prisma.indicatorDefinition.create({
       data: {
         name: `${original.name} (copie)`,
         description: original.description,
         type: 'custom', // Always create as custom
+        rankingMode: original.rankingMode,
         groupBy: original.groupBy,
         metricField: original.metricField,
         aggregation: original.aggregation,
         filters: original.filters as any,
         sortOrder: original.sortOrder,
         topN: original.topN,
+        // Advanced ranking fields
+        selectedRanks: original.selectedRanks as any,
+        specialOperations: original.specialOperations as any,
+        includedCollaboratorIds: original.includedCollaboratorIds as any,
+        excludedCollaboratorIds: original.excludedCollaboratorIds as any,
         isActive: true
       }
     });
+    
+    console.log('✅ Indicator duplicated successfully:', duplicate.id);
     
     res.json({
       success: true,

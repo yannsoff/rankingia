@@ -44,17 +44,50 @@ export default function IndicatorStep({
   };
 
   const handleRunIndicator = async (indicator: IndicatorDefinition) => {
+    // Debug logging
+    console.log('🎯 handleRunIndicator called', {
+      indicatorId: indicator.id,
+      indicatorName: indicator.name,
+      datasetId: dataset.id,
+      rankingMode: indicator.rankingMode,
+      hasSelectedRanks: !!indicator.selectedRanks,
+      hasIncludedCollaborators: !!indicator.includedCollaboratorIds
+    });
+
     setIsComputing(true);
     setError('');
 
     try {
       onIndicatorSelected(indicator.id);
       
+      console.log('📤 Sending ranking computation request:', {
+        indicatorId: indicator.id,
+        datasetId: dataset.id
+      });
+      
       const response = await rankingAPI.compute(indicator.id, dataset.id);
+      
+      console.log('✅ Ranking computed successfully:', {
+        totalRows: response.data.ranking.totalRows
+      });
+      
       onRankingComputed(response.data.ranking);
     } catch (err: any) {
-      console.error('Error computing ranking:', err);
-      setError(err.response?.data?.error || 'Erreur lors du calcul du ranking');
+      console.error('❌ Error computing ranking:', err);
+      console.error('Error details:', {
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      // Enhanced error handling with user-friendly messages
+      const errorMessage = err.response?.data?.error || 'Erreur lors du calcul du ranking';
+      const errorHint = err.response?.data?.hint;
+      
+      if (errorHint) {
+        setError(`${errorMessage}\n\n💡 ${errorHint}`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsComputing(false);
     }
@@ -292,15 +325,96 @@ function IndicatorCard({ indicator, onRun, onDuplicate, onDelete, isComputing }:
     return labels[metric] || metric;
   };
 
+  // Handle click on disabled button to provide feedback
+  const handleExecuteClick = () => {
+    console.log('🖱️ Execute button clicked', {
+      indicatorId: indicator.id,
+      name: indicator.name,
+      isConfigComplete: configComplete,
+      isComputing
+    });
+
+    if (!configComplete) {
+      alert('⚠️ Configuration incomplète\n\nCet indicateur ne peut pas être exécuté car sa configuration est incomplète.\n\nVeuillez le dupliquer pour le reconfigurer avec le fichier actuel.');
+      return;
+    }
+
+    if (isComputing) {
+      console.log('⏳ Already computing, ignoring click');
+      return;
+    }
+
+    // Call the actual run handler
+    onRun();
+  };
+
+  // Check if indicator configuration is complete for advanced modes
+  const isConfigurationComplete = () => {
+    const mode = indicator.rankingMode || 'standard';
+    
+    if (mode === 'standard') {
+      return true; // Standard mode always has complete config
+    }
+    
+    if (mode === 'mixedRanks' || mode === 'singleRankSelection') {
+      // Check if advanced fields are present
+      const hasSelectedRanks = indicator.selectedRanks && 
+        (Array.isArray(indicator.selectedRanks) ? indicator.selectedRanks.length > 0 : true);
+      const hasCollaborators = indicator.includedCollaboratorIds && 
+        (Array.isArray(indicator.includedCollaboratorIds) ? indicator.includedCollaboratorIds.length > 0 : true);
+      
+      const isComplete = hasSelectedRanks && hasCollaborators;
+      
+      // Debug logging for incomplete indicators
+      if (!isComplete) {
+        console.log('⚠️ Indicator configuration incomplete:', {
+          indicatorId: indicator.id,
+          name: indicator.name,
+          mode,
+          hasSelectedRanks,
+          hasCollaborators,
+          selectedRanks: indicator.selectedRanks,
+          includedCollaboratorIds: indicator.includedCollaboratorIds
+        });
+      }
+      
+      return isComplete;
+    }
+    
+    return true;
+  };
+
+  const configComplete = isConfigurationComplete();
+  const getRankingModeLabel = (mode?: string) => {
+    switch (mode) {
+      case 'mixedRanks': return 'Multi-rangs';
+      case 'singleRankSelection': return 'Sélection manuelle';
+      case 'standard':
+      default: return 'Standard';
+    }
+  };
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-primary-300 hover:shadow-md transition">
+    <div className={`bg-white border rounded-lg p-4 hover:shadow-md transition ${
+      configComplete ? 'border-gray-200 hover:border-primary-300' : 'border-orange-300 bg-orange-50'
+    }`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h4 className="font-semibold text-gray-900 mb-1">{indicator.name}</h4>
+          <div className="flex items-center gap-2 mb-1">
+            <h4 className="font-semibold text-gray-900">{indicator.name}</h4>
+            {!configComplete && (
+              <span className="px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded font-medium" title="Configuration incomplète">
+                ⚠️ Incomplet
+              </span>
+            )}
+          </div>
           {indicator.description && (
             <p className="text-sm text-gray-600 mb-2">{indicator.description}</p>
           )}
           <div className="flex flex-wrap gap-2 text-xs">
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+              {getRankingModeLabel(indicator.rankingMode)}
+            </span>
             <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
               {getGroupByLabel(indicator.groupBy)}
             </span>
@@ -311,16 +425,30 @@ function IndicatorCard({ indicator, onRun, onDuplicate, onDelete, isComputing }:
               {indicator.aggregation}
             </span>
           </div>
+          {!configComplete && (
+            <p className="text-xs text-orange-700 mt-2">
+              Cet indicateur nécessite une configuration complète. Dupliquez-le pour le reconfigurer.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={onRun}
+            onClick={handleExecuteClick}
             disabled={isComputing}
-            className="flex items-center gap-1 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 text-sm font-medium"
+            className={`flex items-center gap-1 px-3 py-2 rounded-lg transition text-sm font-medium ${
+              !configComplete
+                ? 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                : 'bg-primary-600 hover:bg-primary-700 text-white'
+            } ${isComputing ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={!configComplete ? 'Configuration incomplète - cliquez pour plus d\'infos' : isComputing ? 'Calcul en cours...' : 'Exécuter ce ranking'}
           >
-            <PlayCircle className="w-4 h-4" />
-            <span>Exécuter</span>
+            {isComputing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <PlayCircle className="w-4 h-4" />
+            )}
+            <span>{isComputing ? 'Calcul...' : 'Exécuter'}</span>
           </button>
 
           <button

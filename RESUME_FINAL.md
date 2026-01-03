@@ -364,3 +364,7 @@ cd backend && npx prisma migrate reset
 *Application créée avec ❤️*
 *Full-Stack • TypeScript • Production-Ready • Modern UI*
 
+
+
+
+

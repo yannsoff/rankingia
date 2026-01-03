@@ -286,3 +286,7 @@ Clic sur "Calculer le ranking" → Résultat avec valeurs ajustées
 **Date de correction** : 9 décembre 2025  
 **Version** : 2.0.0  
 **Statut** : ✅ Opérationnel
+
+
+
+
